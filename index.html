@@ -2,43 +2,228 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Supabase Test</title>
+  <title>Petty Cash System</title>
 
-  <!-- Supabase UMD -->
   <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+  <style>
+    body { font-family: Arial; background:#f4f6f8; margin:20px; }
+    .card { background:white; padding:15px; margin-bottom:20px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+    input, select { width:100%; padding:8px; margin:5px 0; }
+    button { padding:8px; background:#007bff; color:white; border:none; cursor:pointer; }
+    button:hover { background:#0056b3; }
+    .row { display:flex; gap:10px; margin-bottom:10px; }
+    .row input, .row select { flex:1; }
+  </style>
 </head>
 
 <body>
 
-<h2>Supabase Connection Test</h2>
+<h1>🏗 Petty Cash System</h1>
 
-<button id="testBtn">Test Database Connection</button>
+<div id="authSection" class="card">
+  <h2>Login</h2>
+  <input type="email" id="email" placeholder="Email">
+  <input type="password" id="password" placeholder="Password">
+  <button id="loginBtn">Login</button>
+</div>
+
+<div id="appSection" style="display:none;">
+
+  <div class="card">
+    <h2>Add Expense Session</h2>
+    <select id="expenseSite"></select>
+    <div id="expenseContainer"></div>
+    <button id="addRowBtn">+ Add Expense</button>
+    <button id="saveSessionBtn">Save Session</button>
+  </div>
+
+  <div class="card">
+    <h2>Add Credit</h2>
+    <select id="creditSite"></select>
+    <input type="number" id="creditAmount" placeholder="Amount">
+    <button id="addCreditBtn">Add Credit</button>
+  </div>
+
+  <div class="card">
+    <h2>Dashboard</h2>
+    <p>Total Credit: <span id="totalCredit">0</span></p>
+    <p>Total Expense: <span id="totalExpense">0</span></p>
+    <p>Balance: <span id="balance">0</span></p>
+  </div>
+
+  <button id="logoutBtn">Logout</button>
+
+</div>
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
 
-  // Initialize Supabase
   const supabaseClient = supabase.createClient(
     "https://nwaewefiihkxjbkfmxrj.supabase.co",
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWV3ZWZpaWhreGpia2ZteHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTIwNTUsImV4cCI6MjA4NjU2ODA1NX0.ZfgHbHu9pYFemHserU0o4DJZ3P71UxmbZGuFOuz3ams"
   );
 
-  const testBtn = document.getElementById("testBtn");
+  let currentUser = null;
+  let cachedCategories = [];
 
-  testBtn.addEventListener("click", async function() {
+  const authSection = document.getElementById("authSection");
+  const appSection = document.getElementById("appSection");
 
-    alert("Button Click Detected");
+  document.getElementById("loginBtn").addEventListener("click", login);
+  document.getElementById("logoutBtn").addEventListener("click", logout);
+  document.getElementById("addRowBtn").addEventListener("click", addExpenseRow);
+  document.getElementById("saveSessionBtn").addEventListener("click", saveSession);
+  document.getElementById("addCreditBtn").addEventListener("click", addCredit);
 
-    const { data, error } = await supabaseClient
-      .from("categories")
-      .select("*");
+  async function login() {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
 
-    if (error) {
-      alert("Database Error: " + error.message);
+    if (!email || !password) {
+      alert("Enter email and password");
       return;
     }
 
-    alert("Success! Categories Found: " + data.length);
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    currentUser = data.user;
+    authSection.style.display = "none";
+    appSection.style.display = "block";
+    await loadInitialData();
+  }
+
+  async function logout() {
+    await supabaseClient.auth.signOut();
+    location.reload();
+  }
+
+  async function loadInitialData() {
+    const { data: sites } = await supabaseClient.from("sites").select("*");
+    const { data: categories } = await supabaseClient.from("categories").select("*");
+
+    document.getElementById("expenseSite").innerHTML =
+      sites.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+
+    document.getElementById("creditSite").innerHTML =
+      sites.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+
+    cachedCategories = categories || [];
+    document.getElementById("expenseContainer").innerHTML = "";
+    addExpenseRow();
+    await loadDashboard();
+  }
+
+  function addExpenseRow() {
+    const container = document.getElementById("expenseContainer");
+
+    const div = document.createElement("div");
+    div.className = "row";
+
+    div.innerHTML = `
+      <input type="number" placeholder="Amount" class="amount">
+      <select class="category">
+        ${cachedCategories.map(c =>
+          `<option value="${c.id}">${c.name}</option>`
+        ).join("")}
+      </select>
+      <input type="text" placeholder="Description" class="desc">
+    `;
+
+    container.appendChild(div);
+  }
+
+  async function saveSession() {
+    const rows = document.querySelectorAll(".row");
+    const site_id = document.getElementById("expenseSite").value;
+
+    const inserts = [];
+
+    rows.forEach(row => {
+      const amount = row.querySelector(".amount").value;
+      const category_id = row.querySelector(".category").value;
+      const description = row.querySelector(".desc").value;
+
+      if (amount) {
+        inserts.push({
+          site_id,
+          user_id: currentUser.id,
+          category_id,
+          amount,
+          description
+        });
+      }
+    });
+
+    if (inserts.length === 0) {
+      alert("No expenses entered");
+      return;
+    }
+
+    const { error } = await supabaseClient.from("expenses").insert(inserts);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert("Expenses saved");
+    document.getElementById("expenseContainer").innerHTML = "";
+    addExpenseRow();
+    await loadDashboard();
+  }
+
+  async function addCredit() {
+    const site_id = document.getElementById("creditSite").value;
+    const amount = document.getElementById("creditAmount").value;
+
+    if (!amount) {
+      alert("Enter credit amount");
+      return;
+    }
+
+    const { error } = await supabaseClient.from("credits").insert([{
+      site_id,
+      amount,
+      created_by: currentUser.id
+    }]);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert("Credit added");
+    await loadDashboard();
+  }
+
+  async function loadDashboard() {
+    const { data: credits } = await supabaseClient.from("credits").select("amount");
+    const { data: expenses } = await supabaseClient.from("expenses").select("amount");
+
+    const totalCredit = (credits || []).reduce((s,c)=>s+Number(c.amount),0);
+    const totalExpense = (expenses || []).reduce((s,e)=>s+Number(e.amount),0);
+
+    document.getElementById("totalCredit").innerText = totalCredit;
+    document.getElementById("totalExpense").innerText = totalExpense;
+    document.getElementById("balance").innerText = totalCredit - totalExpense;
+  }
+
+  supabaseClient.auth.getSession().then(({ data }) => {
+    if (data.session) {
+      currentUser = data.session.user;
+      authSection.style.display = "none";
+      appSection.style.display = "block";
+      loadInitialData();
+    }
   });
 
 });
