@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Petty Cash System</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial; background:#f4f6f8; margin:20px; }
+    .card { background:white; padding:15px; margin-bottom:20px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+    input, select { width:100%; padding:8px; margin:5px 0; }
+    button { padding:8px; background:#007bff; color:white; border:none; cursor:pointer; }
+    button:hover { background:#0056b3; }
+    .row { display:flex; gap:10px; margin-bottom:10px; }
+    .row input, .row select { flex:1; }
+  </style>
+</head>
+<body>
+
+<h1>🏗 Petty Cash System</h1>
+
+<div id="authSection" class="card">
+  <h2>Login</h2>
+  <input type="email" id="email" placeholder="Email">
+  <input type="password" id="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+</div>
+
+<div id="appSection" style="display:none;">
+
+  <div class="card">
+    <h2>Add Expense Session</h2>
+    <select id="expenseSite"></select>
+    <div id="expenseContainer"></div>
+    <button onclick="addExpenseRow()">+ Add Expense</button>
+    <button onclick="saveSession()">Save Session</button>
+  </div>
+
+  <div class="card">
+    <h2>Add Credit</h2>
+    <select id="creditSite"></select>
+    <input type="number" id="creditAmount" placeholder="Amount">
+    <button onclick="addCredit()">Add Credit</button>
+  </div>
+
+  <div class="card">
+    <h2>Dashboard</h2>
+    <p>Total Credit: <span id="totalCredit">0</span></p>
+    <p>Total Expense: <span id="totalExpense">0</span></p>
+    <p>Balance: <span id="balance">0</span></p>
+  </div>
+
+  <button onclick="logout()">Logout</button>
+
+</div>
+
+<script>
+const supabase = window.supabase.createClient(
+  "YOUR_SUPABASE_URL",
+  "YOUR_ANON_KEY"
+);
+
+let currentUser = null;
+
+async function login() {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.value,
+    password: password.value
+  });
+  if (error) return alert(error.message);
+
+  currentUser = data.user;
+  authSection.style.display="none";
+  appSection.style.display="block";
+  loadInitialData();
+}
+
+async function logout() {
+  await supabase.auth.signOut();
+  location.reload();
+}
+
+async function loadInitialData() {
+  const { data: sites } = await supabase.from("sites").select("*");
+  const { data: categories } = await supabase.from("categories").select("*");
+
+  expenseSite.innerHTML = sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
+  creditSite.innerHTML = sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
+
+  window.cachedCategories = categories;
+  addExpenseRow();
+  loadDashboard();
+}
+
+function addExpenseRow() {
+  const div = document.createElement("div");
+  div.className="row";
+  div.innerHTML = `
+    <input type="number" placeholder="Amount" class="amount">
+    <select class="category">
+      ${window.cachedCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join("")}
+    </select>
+    <input type="text" placeholder="Description" class="desc">
+  `;
+  expenseContainer.appendChild(div);
+}
+
+async function saveSession() {
+  const rows = document.querySelectorAll(".row");
+  const site_id = expenseSite.value;
+
+  const inserts = [];
+
+  rows.forEach(r=>{
+    const amount = r.querySelector(".amount").value;
+    const category_id = r.querySelector(".category").value;
+    const description = r.querySelector(".desc").value;
+
+    if(amount){
+      inserts.push({
+        site_id,
+        user_id: currentUser.id,
+        category_id,
+        amount,
+        description
+      });
+    }
+  });
+
+  if(inserts.length===0) return alert("No expenses entered");
+
+  const { error } = await supabase.from("expenses").insert(inserts);
+  if(error) return alert(error.message);
+
+  alert("Expenses saved");
+  expenseContainer.innerHTML="";
+  addExpenseRow();
+  loadDashboard();
+}
+
+async function addCredit() {
+  const { error } = await supabase.from("credits").insert([{
+    site_id: creditSite.value,
+    amount: creditAmount.value,
+    created_by: currentUser.id
+  }]);
+  if(error) return alert(error.message);
+  alert("Credit added");
+  loadDashboard();
+}
+
+async function loadDashboard() {
+  const { data: credits } = await supabase.from("credits").select("amount");
+  const { data: expenses } = await supabase.from("expenses").select("amount");
+
+  const totalCredit = credits.reduce((s,c)=>s+Number(c.amount),0);
+  const totalExpense = expenses.reduce((s,e)=>s+Number(e.amount),0);
+
+  totalCreditEl = document.getElementById("totalCredit");
+  totalExpenseEl = document.getElementById("totalExpense");
+  balanceEl = document.getElementById("balance");
+
+  totalCreditEl.innerText = totalCredit;
+  totalExpenseEl.innerText = totalExpense;
+  balanceEl.innerText = totalCredit-totalExpense;
+}
+
+supabase.auth.getSession().then(({data})=>{
+  if(data.session){
+    currentUser=data.session.user;
+    authSection.style.display="none";
+    appSection.style.display="block";
+    loadInitialData();
+  }
+});
+</script>
+
+</body>
+</html>
