@@ -61,15 +61,27 @@ const supabase = window.supabase.createClient(
 let currentUser = null;
 
 async function login() {
+  const emailValue = document.getElementById("email").value;
+  const passwordValue = document.getElementById("password").value;
+
+  if (!emailValue || !passwordValue) {
+    alert("Please enter email and password");
+    return;
+  }
+
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.value,
-    password: password.value
+    email: emailValue,
+    password: passwordValue
   });
-  if (error) return alert(error.message);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
 
   currentUser = data.user;
-  authSection.style.display="none";
-  appSection.style.display="block";
+  document.getElementById("authSection").style.display = "none";
+  document.getElementById("appSection").style.display = "block";
   loadInitialData();
 }
 
@@ -154,9 +166,9 @@ async function loadDashboard() {
   const totalCredit = credits.reduce((s,c)=>s+Number(c.amount),0);
   const totalExpense = expenses.reduce((s,e)=>s+Number(e.amount),0);
 
-  totalCreditEl = document.getElementById("totalCredit");
-  totalExpenseEl = document.getElementById("totalExpense");
-  balanceEl = document.getElementById("balance");
+  const totalCreditEl = document.getElementById("totalCredit");
+const totalExpenseEl = document.getElementById("totalExpense");
+const balanceEl = document.getElementById("balance");
 
   totalCreditEl.innerText = totalCredit;
   totalExpenseEl.innerText = totalExpense;
