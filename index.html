@@ -7,7 +7,7 @@
 
 <style>
 body { margin:0; font-family: Arial; display:flex; height:100vh; }
-#sidebar { width:220px; background:#1f2937; color:white; padding:20px; display:flex; flex-direction:column; }
+#sidebar { width:230px; background:#1f2937; color:white; padding:20px; display:flex; flex-direction:column; }
 #sidebar h2 { margin-top:0; }
 .sidebar-item { padding:10px; cursor:pointer; border-radius:6px; margin-bottom:5px; }
 .sidebar-item:hover { background:#374151; }
@@ -22,8 +22,9 @@ button:hover { background:#1d4ed8; }
 #loginPage { width:100%; display:flex; justify-content:center; align-items:center; }
 #appLayout { display:none; width:100%; }
 .admin-section { margin-bottom:15px; }
-.admin-section h3 { cursor:pointer; }
+.admin-section h3 { cursor:pointer; margin-bottom:5px; }
 .hidden-section { display:none; }
+hr { margin:15px 0; }
 </style>
 </head>
 
@@ -55,6 +56,7 @@ button:hover { background:#1d4ed8; }
 <script>
 document.addEventListener("DOMContentLoaded", function(){
 
+  
 const supabaseClient = supabase.createClient(
   "https://nwaewefiihkxjbkfmxrj.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWV3ZWZpaWhreGpia2ZteHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTIwNTUsImV4cCI6MjA4NjU2ODA1NX0.ZfgHbHu9pYFemHserU0o4DJZ3P71UxmbZGuFOuz3ams"
@@ -94,11 +96,7 @@ async function login(){
 
 async function loadPermissions(){
   const { data, error } = await supabaseClient.rpc('get_user_permissions');
-
-  if(error){
-    alert("Permission load error: "+error.message);
-    return;
-  }
+  if(error){ alert("Permission error: "+error.message); return; }
 
   userPermissions = data.map(p=>p.permission_name);
 
@@ -141,17 +139,15 @@ async function renderExpense(){
         ${(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}
       </select>
       <div id="expenseContainer"></div>
-      <button id="addRowBtn">+ Add Expense</button>
-      <button id="saveExpenseBtn">Save</button>
+      <button onclick="addExpenseRow()">+ Add Expense</button>
+      <button onclick="saveExpense()">Save</button>
     </div>
   `;
 
-  document.getElementById("addRowBtn").addEventListener("click", addExpenseRow);
-  document.getElementById("saveExpenseBtn").addEventListener("click", saveExpense);
   addExpenseRow();
 }
 
-function addExpenseRow(){
+window.addExpenseRow=function(){
   const div=document.createElement("div");
   div.className="row";
   div.innerHTML=`
@@ -164,7 +160,7 @@ function addExpenseRow(){
   document.getElementById("expenseContainer").appendChild(div);
 }
 
-async function saveExpense(){
+window.saveExpense=async function(){
   const rows=document.querySelectorAll(".row");
   const site_id=document.getElementById("expenseSite").value;
   const inserts=[];
@@ -174,12 +170,9 @@ async function saveExpense(){
     const description=r.querySelector(".desc").value;
     if(amount){ inserts.push({site_id,user_id:currentUser.id,category_id,amount,description}); }
   });
-
-  if(inserts.length===0){ alert("No entries"); return; }
-
+  if(inserts.length===0){alert("No entries");return;}
   const {error}=await supabaseClient.from("expenses").insert(inserts);
-  if(error){ alert(error.message); return; }
-
+  if(error){alert(error.message);return;}
   alert("Saved");
   renderDashboard();
 }
@@ -194,21 +187,27 @@ async function renderCredit(){
         ${(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}
       </select>
       <input type="number" id="creditAmount" placeholder="Amount">
-      <button id="saveCreditBtn">Save</button>
+      <button onclick="saveCredit()">Save</button>
     </div>
   `;
+}
 
-  document.getElementById("saveCreditBtn").addEventListener("click", async ()=>{
-    const site_id=document.getElementById("creditSite").value;
-    const amount=document.getElementById("creditAmount").value;
-    const {error}=await supabaseClient.from("credits").insert([{site_id,amount,created_by:currentUser.id}]);
-    if(error){alert(error.message);return;}
-    alert("Credit added");
-    renderDashboard();
-  });
+window.saveCredit=async function(){
+  const site_id=document.getElementById("creditSite").value;
+  const amount=document.getElementById("creditAmount").value;
+  const {error}=await supabaseClient.from("credits").insert([{site_id,amount,created_by:currentUser.id}]);
+  if(error){alert(error.message);return;}
+  alert("Credit added");
+  renderDashboard();
 }
 
 async function renderAdmin(){
+
+  const { data: roles } = await supabaseClient.from("roles").select("*");
+  const { data: permissions } = await supabaseClient.from("permissions").select("*");
+  const { data: users } = await supabaseClient.from("profiles").select("id, full_name");
+  const { data: sites } = await supabaseClient.from("sites").select("*");
+
   main.innerHTML=`
     <div class="card">
       <h2>Admin Panel</h2>
@@ -230,6 +229,55 @@ async function renderAdmin(){
         </div>
       </div>
 
+      <hr>
+
+      <div class="admin-section">
+        <h3 onclick="toggleSection('roleSection')">▸ Roles</h3>
+        <div id="roleSection" class="hidden-section">
+          <input type="text" id="newRoleName" placeholder="Role Name">
+          <input type="text" id="newRoleDesc" placeholder="Description">
+          <button onclick="createRole()">Create Role</button>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <h3 onclick="toggleSection('permissionSection')">▸ Permissions</h3>
+        <div id="permissionSection" class="hidden-section">
+          <input type="text" id="newPermName" placeholder="Permission Name">
+          <input type="text" id="newPermModule" placeholder="Module Name">
+          <button onclick="createPermission()">Create Permission</button>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <h3 onclick="toggleSection('mapSection')">▸ Role → Permission</h3>
+        <div id="mapSection" class="hidden-section">
+          <select id="roleSelect">
+            ${(roles||[]).map(r=>`<option value="${r.id}">${r.name}</option>`).join("")}
+          </select>
+          <select id="permSelect">
+            ${(permissions||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join("")}
+          </select>
+          <button onclick="assignPermissionToRole()">Assign</button>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <h3 onclick="toggleSection('assignSection')">▸ User → Role Assignment</h3>
+        <div id="assignSection" class="hidden-section">
+          <select id="userSelect">
+            ${(users||[]).map(u=>`<option value="${u.id}">${u.full_name}</option>`).join("")}
+          </select>
+          <select id="userRoleSelect">
+            ${(roles||[]).map(r=>`<option value="${r.id}">${r.name}</option>`).join("")}
+          </select>
+          <select id="siteSelect">
+            ${(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}
+          </select>
+          <button onclick="assignRoleToUser()">Assign Role</button>
+        </div>
+      </div>
+
     </div>
   `;
 }
@@ -242,7 +290,6 @@ window.toggleSection=function(id){
 window.createUser=async function(){
   const email=document.getElementById("newUserEmail").value;
   const password=document.getElementById("newUserPassword").value;
-
   const {data}=await supabaseClient.auth.getSession();
   const token=data.session.access_token;
 
@@ -268,6 +315,43 @@ window.createSite=async function(){
   const {error}=await supabaseClient.from("sites").insert([{name}]);
   if(error){alert(error.message);return;}
   alert("Site created");
+}
+
+window.createRole=async function(){
+  const name=document.getElementById("newRoleName").value;
+  const description=document.getElementById("newRoleDesc").value;
+  const {error}=await supabaseClient.from("roles").insert([{name,description}]);
+  if(error){alert(error.message);return;}
+  alert("Role created");
+  renderAdmin();
+}
+
+window.createPermission=async function(){
+  const name=document.getElementById("newPermName").value;
+  const module=document.getElementById("newPermModule").value;
+  const {error}=await supabaseClient.from("permissions").insert([{name,module}]);
+  if(error){alert(error.message);return;}
+  alert("Permission created");
+  renderAdmin();
+}
+
+window.assignPermissionToRole=async function(){
+  const role_id=document.getElementById("roleSelect").value;
+  const permission_id=document.getElementById("permSelect").value;
+  const {error}=await supabaseClient.from("role_permissions")
+    .insert([{role_id,permission_id}]);
+  if(error){alert(error.message);return;}
+  alert("Permission assigned");
+}
+
+window.assignRoleToUser=async function(){
+  const user_id=document.getElementById("userSelect").value;
+  const role_id=document.getElementById("userRoleSelect").value;
+  const site_id=document.getElementById("siteSelect").value;
+  const {error}=await supabaseClient.from("user_roles")
+    .insert([{user_id,role_id,site_id}]);
+  if(error){alert(error.message);return;}
+  alert("Role assigned to user");
 }
 
 async function logout(){
