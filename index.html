@@ -222,12 +222,14 @@ async function renderAdmin(){
       </div>
 
       <div class="admin-section">
-        <h3 onclick="toggleSection('siteSection')">▸ Sites</h3>
-        <div id="siteSection" class="hidden-section">
-          <input type="text" id="newSiteName" placeholder="Site Name">
-          <button onclick="createSite()">Create Site</button>
-        </div>
-      </div>
+  <h3 onclick="toggleSection('siteSection')">▸ Sites</h3>
+  <div id="siteSection" class="hidden-section">
+    <input type="text" id="newSiteName" placeholder="Site Name">
+    <input type="text" id="newSiteLocation" placeholder="Location">
+    <button onclick="createSite()">Create Site</button>
+  </div>
+</div>
+
 
       <hr>
 
@@ -326,6 +328,39 @@ window.createRole=async function(){
   renderAdmin();
 }
 
+window.createSite = async function(){
+
+  try {
+
+    const name = document.getElementById("newSiteName").value;
+    const location = document.getElementById("newSiteLocation").value;
+
+    if(!name){
+      alert("Site name required");
+      return;
+    }
+
+    const { error } = await supabaseClient
+      .from("sites")
+      .insert([{ name, location }]);
+
+    if(error){
+      alert("Error: " + error.message);
+      return;
+    }
+
+    alert("Site created successfully");
+
+    // reload admin panel to refresh dropdowns
+    renderAdmin();
+
+  } catch(err){
+    console.error(err);
+    alert("Unexpected error creating site");
+  }
+}
+
+  
 window.createPermission=async function(){
   const name=document.getElementById("newPermName").value;
   const module=document.getElementById("newPermModule").value;
