@@ -172,41 +172,36 @@ async function login(){
   renderDashboard();
 }
 
-async function loadPermissions(){
-  const {data}=await supabaseClient
-  .from("user_roles")
-  .select(`
-    roles(
-      role_permissions(
-        permissions(name)
-      )
-    )
-  `)
-  .eq("user_id",currentUser.id);
+async function loadPermissions() {
+  try {
 
-  userPermissions=[];
-  data?.forEach(r=>{
-    r.roles?.role_permissions?.forEach(p=>{
-      if(p.permissions?.name){
-        userPermissions.push(p.permissions.name);
-      }
-    });
-  });
+    const { data, error } = await supabaseClient.rpc('get_user_permissions');
 
-  if(userPermissions.includes("create_expense"))
-    document.getElementById("navExpense").classList.remove("hidden");
+    if (error) {
+      console.error("Permission load error:", error);
+      alert("Permission loading failed: " + error.message);
+      return;
+    }
 
-  if(userPermissions.includes("create_credit"))
-    document.getElementById("navCredit").classList.remove("hidden");
+    userPermissions = data.map(p => p.permission_name);
 
-  if(userPermissions.includes("manage_roles"))
-    document.getElementById("navAdmin").classList.remove("hidden");
+    console.log("Loaded Permissions:", userPermissions);
 
-  console.log("User Permissions:", userPermissions);
-alert("Permissions: " + userPermissions.join(", "));
+    if(userPermissions.includes("create_expense"))
+      document.getElementById("navExpense").classList.remove("hidden");
 
-  
+    if(userPermissions.includes("create_credit"))
+      document.getElementById("navCredit").classList.remove("hidden");
+
+    if(userPermissions.includes("manage_roles"))
+      document.getElementById("navAdmin").classList.remove("hidden");
+
+  } catch(err) {
+    console.error("Unexpected permission error:", err);
+    alert("Unexpected permission error.");
+  }
 }
+
 
 async function renderDashboard(){
   const {data:credits}=await supabaseClient.from("credits").select("amount");
