@@ -10,10 +10,11 @@ body { font-family: Arial; background:#f4f6f8; margin:20px; }
 .card { background:white; padding:15px; margin-bottom:20px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
 input, select { width:100%; padding:8px; margin:5px 0; }
 button { padding:8px; background:#007bff; color:white; border:none; cursor:pointer; margin-top:5px; }
-button:hover { background:#0056b3; }
+button:disabled { background:#999; cursor:not-allowed; }
 .row { display:flex; gap:10px; margin-bottom:10px; }
 .row input, .row select { flex:1; }
 .admin-section { border:2px solid #ddd; padding:10px; margin-top:10px; }
+.debug { background:#fef3c7; padding:10px; margin-bottom:10px; border-radius:6px; }
 </style>
 </head>
 
@@ -29,6 +30,11 @@ button:hover { background:#0056b3; }
 </div>
 
 <div id="appSection" style="display:none;">
+
+<div class="debug">
+<strong>Debug Info:</strong><br>
+User Permissions: <span id="permissionList">None</span>
+</div>
 
 <div class="card">
 <h2>Add Expense Session</h2>
@@ -88,7 +94,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
 const supabaseClient = supabase.createClient(
 "https://nwaewefiihkxjbkfmxrj.supabase.co",
-"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWV3ZWZpaWhreGpia2ZteHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTIwNTUsImV4cCI6MjA4NjU2ODA1NX0.ZfgHbHu9pYFemHserU0o4DJZ3P71UxmbZGuFOuz3ams"
+"YOUR_ANON_KEY_HERE"
 );
 
 let currentUser = null;
@@ -109,36 +115,97 @@ document.getElementById("createPermissionBtn").addEventListener("click", createP
 document.getElementById("assignRoleBtn").addEventListener("click", assignRoleToUser);
 
 async function login() {
+try {
 const email = document.getElementById("email").value;
 const password = document.getElementById("password").value;
 
+if(!email || !password){
+alert("Enter email & password");
+return;
+}
+
 const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-if (error) { alert(error.message); return; }
+
+if (error) {
+alert("Login Error: " + error.message);
+return;
+}
 
 currentUser = data.user;
 authSection.style.display="none";
 appSection.style.display="block";
+
 await loadInitialData();
 await loadUserPermissions();
+
+} catch (err) {
+console.error("Unexpected Login Error:", err);
+alert("Unexpected login failure.");
+}
 }
 
 async function loadUserPermissions() {
-const { data } = await supabaseClient
+try {
+
+const { data, error } = await supabaseClient
 .from("user_roles")
-.select("role_id, roles(id, role_permissions(permission_id, permissions(name)))")
+.select(`
+role_id,
+roles (
+id,
+name,
+role_permissions (
+permission_id,
+permissions ( name )
+)
+)
+`)
 .eq("user_id", currentUser.id);
+
+if (error) {
+alert("Error loading roles: " + error.message);
+console.error(error);
+return;
+}
+
+if (!data || data.length === 0) {
+alert("No roles assigned to this user.");
+return;
+}
 
 userPermissions = [];
 
-data.forEach(ur=>{
-ur.roles.role_permissions.forEach(rp=>{
+data.forEach(ur => {
+if (!ur.roles) return;
+ur.roles.role_permissions.forEach(rp => {
+if (rp.permissions?.name) {
 userPermissions.push(rp.permissions.name);
+}
 });
 });
 
-if(userPermissions.includes("manage_roles")) {
+document.getElementById("permissionList").innerText =
+userPermissions.length ? userPermissions.join(", ") : "None";
+
+console.log("Loaded Permissions:", userPermissions);
+
+if(userPermissions.includes("manage_roles")){
 adminPanel.style.display="block";
 await loadAdminData();
+}
+
+if(!userPermissions.includes("create_credit")){
+document.getElementById("addCreditBtn").disabled = true;
+}
+
+if(!userPermissions.includes("create_expense")){
+document.getElementById("saveSessionBtn").disabled = true;
+document.getElementById("addRowBtn").disabled = true;
+}
+
+} catch(err){
+console.error("Permission Load Failure:", err);
+alert("Permission loading failed.");
 }
 }
 
@@ -148,74 +215,66 @@ const { data: roles } = await supabaseClient.from("roles").select("*");
 const { data: sites } = await supabaseClient.from("sites").select("*");
 
 document.getElementById("assignUser").innerHTML =
-users.map(u=>`<option value="${u.id}">${u.full_name}</option>`).join("");
+(users||[]).map(u=>`<option value="${u.id}">${u.full_name}</option>`).join("");
 
 document.getElementById("assignRole").innerHTML =
-roles.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
+(roles||[]).map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
 
 document.getElementById("assignSite").innerHTML =
-sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
+(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
 }
 
-async function createRole() {
-const name = document.getElementById("newRoleName").value;
-const description = document.getElementById("newRoleDesc").value;
-
-const { error } = await supabaseClient.from("roles").insert([{ name, description }]);
-if(error){ alert(error.message); return; }
-
+async function createRole(){
+const name=document.getElementById("newRoleName").value;
+const description=document.getElementById("newRoleDesc").value;
+const {error}=await supabaseClient.from("roles").insert([{name,description}]);
+if(error){alert(error.message);return;}
 alert("Role created");
 await loadAdminData();
 }
 
-async function createPermission() {
-const name = document.getElementById("newPermissionName").value;
-const module = document.getElementById("newPermissionModule").value;
-
-const { error } = await supabaseClient.from("permissions").insert([{ name, module }]);
-if(error){ alert(error.message); return; }
-
+async function createPermission(){
+const name=document.getElementById("newPermissionName").value;
+const module=document.getElementById("newPermissionModule").value;
+const {error}=await supabaseClient.from("permissions").insert([{name,module}]);
+if(error){alert(error.message);return;}
 alert("Permission created");
 }
 
-async function assignRoleToUser() {
-const user_id = document.getElementById("assignUser").value;
-const role_id = document.getElementById("assignRole").value;
-const site_id = document.getElementById("assignSite").value;
-
-const { error } = await supabaseClient.from("user_roles")
-.insert([{ user_id, role_id, site_id }]);
-
-if(error){ alert(error.message); return; }
-
+async function assignRoleToUser(){
+const user_id=document.getElementById("assignUser").value;
+const role_id=document.getElementById("assignRole").value;
+const site_id=document.getElementById("assignSite").value;
+const {error}=await supabaseClient.from("user_roles").insert([{user_id,role_id,site_id}]);
+if(error){alert(error.message);return;}
 alert("Role assigned");
 }
 
-async function logout() {
+async function logout(){
 await supabaseClient.auth.signOut();
 location.reload();
 }
 
-async function loadInitialData() {
+async function loadInitialData(){
 const { data: sites } = await supabaseClient.from("sites").select("*");
 const { data: categories } = await supabaseClient.from("categories").select("*");
 
 document.getElementById("expenseSite").innerHTML =
-sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
+(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
 
 document.getElementById("creditSite").innerHTML =
-sites.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
+(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
 
-cachedCategories = categories || [];
+cachedCategories=categories||[];
 document.getElementById("expenseContainer").innerHTML="";
 addExpenseRow();
 await loadDashboard();
 }
 
-function addExpenseRow() {
-const div = document.createElement("div");
+function addExpenseRow(){
+const div=document.createElement("div");
 div.className="row";
-div.innerHTML = `
+div.innerHTML=`
 <input type="number" placeholder="Amount" class="amount">
 <select class="category">
 ${cachedCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join("")}
@@ -225,25 +284,27 @@ ${cachedCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join("")
 document.getElementById("expenseContainer").appendChild(div);
 }
 
-async function saveSession() {
-const rows = document.querySelectorAll(".row");
-const site_id = document.getElementById("expenseSite").value;
-const inserts = [];
+async function saveSession(){
+if(!userPermissions.includes("create_expense")){
+alert("You do not have permission to create expenses.");
+return;
+}
+
+const rows=document.querySelectorAll(".row");
+const site_id=document.getElementById("expenseSite").value;
+const inserts=[];
 
 rows.forEach(row=>{
-const amount = row.querySelector(".amount").value;
-const category_id = row.querySelector(".category").value;
-const description = row.querySelector(".desc").value;
-
-if(amount){
-inserts.push({ site_id, user_id: currentUser.id, category_id, amount, description });
-}
+const amount=row.querySelector(".amount").value;
+const category_id=row.querySelector(".category").value;
+const description=row.querySelector(".desc").value;
+if(amount){inserts.push({site_id,user_id:currentUser.id,category_id,amount,description});}
 });
 
-if(inserts.length===0){ alert("No expenses entered"); return; }
+if(inserts.length===0){alert("No expenses entered");return;}
 
-const { error } = await supabaseClient.from("expenses").insert(inserts);
-if(error){ alert(error.message); return; }
+const {error}=await supabaseClient.from("expenses").insert(inserts);
+if(error){alert(error.message);return;}
 
 alert("Expenses saved");
 document.getElementById("expenseContainer").innerHTML="";
@@ -251,25 +312,30 @@ addExpenseRow();
 await loadDashboard();
 }
 
-async function addCredit() {
-const site_id = document.getElementById("creditSite").value;
-const amount = document.getElementById("creditAmount").value;
+async function addCredit(){
+if(!userPermissions.includes("create_credit")){
+alert("You do not have permission to add credit.");
+return;
+}
 
-const { error } = await supabaseClient.from("credits")
-.insert([{ site_id, amount, created_by: currentUser.id }]);
+const site_id=document.getElementById("creditSite").value;
+const amount=document.getElementById("creditAmount").value;
 
-if(error){ alert(error.message); return; }
+const {error}=await supabaseClient.from("credits")
+.insert([{site_id,amount,created_by:currentUser.id}]);
+
+if(error){alert(error.message);return;}
 
 alert("Credit added");
 await loadDashboard();
 }
 
-async function loadDashboard() {
-const { data: credits } = await supabaseClient.from("credits").select("amount");
-const { data: expenses } = await supabaseClient.from("expenses").select("amount");
+async function loadDashboard(){
+const {data:credits}=await supabaseClient.from("credits").select("amount");
+const {data:expenses}=await supabaseClient.from("expenses").select("amount");
 
-const totalCredit = (credits||[]).reduce((s,c)=>s+Number(c.amount),0);
-const totalExpense = (expenses||[]).reduce((s,e)=>s+Number(e.amount),0);
+const totalCredit=(credits||[]).reduce((s,c)=>s+Number(c.amount),0);
+const totalExpense=(expenses||[]).reduce((s,e)=>s+Number(e.amount),0);
 
 document.getElementById("totalCredit").innerText=totalCredit;
 document.getElementById("totalExpense").innerText=totalExpense;
