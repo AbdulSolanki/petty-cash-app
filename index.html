@@ -2,344 +2,322 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Petty Cash System</title>
+<title>Construction Finance System</title>
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
 <style>
-body { font-family: Arial; background:#f4f6f8; margin:20px; }
-.card { background:white; padding:15px; margin-bottom:20px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
-input, select { width:100%; padding:8px; margin:5px 0; }
-button { padding:8px; background:#007bff; color:white; border:none; cursor:pointer; margin-top:5px; }
-button:disabled { background:#999; cursor:not-allowed; }
-.row { display:flex; gap:10px; margin-bottom:10px; }
-.row input, .row select { flex:1; }
-.admin-section { border:2px solid #ddd; padding:10px; margin-top:10px; }
-.debug { background:#fef3c7; padding:10px; margin-bottom:10px; border-radius:6px; }
+body {
+  margin:0;
+  font-family: Arial;
+  display:flex;
+  height:100vh;
+}
+
+/* Sidebar */
+#sidebar {
+  width:220px;
+  background:#1f2937;
+  color:white;
+  padding:20px;
+  display:flex;
+  flex-direction:column;
+}
+
+#sidebar h2 {
+  margin-top:0;
+}
+
+.sidebar-item {
+  padding:10px;
+  cursor:pointer;
+  border-radius:6px;
+  margin-bottom:5px;
+}
+
+.sidebar-item:hover {
+  background:#374151;
+}
+
+.sidebar-item.hidden {
+  display:none;
+}
+
+/* Main Area */
+#main {
+  flex:1;
+  background:#f4f6f8;
+  padding:20px;
+  overflow:auto;
+}
+
+.card {
+  background:white;
+  padding:15px;
+  border-radius:8px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.1);
+  margin-bottom:20px;
+}
+
+input, select {
+  width:100%;
+  padding:8px;
+  margin:5px 0;
+}
+
+button {
+  padding:8px;
+  background:#2563eb;
+  color:white;
+  border:none;
+  cursor:pointer;
+  border-radius:4px;
+}
+
+button:disabled {
+  background:#9ca3af;
+}
+
+button:hover {
+  background:#1d4ed8;
+}
+
+.row {
+  display:flex;
+  gap:10px;
+  margin-bottom:10px;
+}
+
+.row input, .row select {
+  flex:1;
+}
+
+#loginPage {
+  width:100%;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+
+#appLayout {
+  display:none;
+  width:100%;
+}
 </style>
 </head>
 
 <body>
 
-<h1>🏗 Petty Cash System</h1>
-
-<div id="authSection" class="card">
-<h2>Login</h2>
-<input type="email" id="email" placeholder="Email">
-<input type="password" id="password" placeholder="Password">
-<button id="loginBtn">Login</button>
+<div id="loginPage">
+  <div class="card" style="width:350px;">
+    <h2>Login</h2>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <button id="loginBtn">Login</button>
+  </div>
 </div>
 
-<div id="appSection" style="display:none;">
+<div id="appLayout">
+  <div id="sidebar">
+    <h2>Finance</h2>
 
-<div class="debug">
-<strong>Debug Info:</strong><br>
-User Permissions: <span id="permissionList">None</span>
-</div>
+    <div id="navDashboard" class="sidebar-item">Dashboard</div>
+    <div id="navExpense" class="sidebar-item hidden">Petty Expense</div>
+    <div id="navCredit" class="sidebar-item hidden">Petty Credit</div>
+    <div id="navAdmin" class="sidebar-item hidden">Admin Panel</div>
 
-<div class="card">
-<h2>Add Expense Session</h2>
-<select id="expenseSite"></select>
-<div id="expenseContainer"></div>
-<button id="addRowBtn">+ Add Expense</button>
-<button id="saveSessionBtn">Save Session</button>
-</div>
+    <div style="margin-top:auto;">
+      <div id="navLogout" class="sidebar-item">Logout</div>
+    </div>
+  </div>
 
-<div class="card">
-<h2>Add Credit</h2>
-<select id="creditSite"></select>
-<input type="number" id="creditAmount" placeholder="Amount">
-<button id="addCreditBtn">Add Credit</button>
-</div>
-
-<div class="card">
-<h2>Dashboard</h2>
-<p>Total Credit: <span id="totalCredit">0</span></p>
-<p>Total Expense: <span id="totalExpense">0</span></p>
-<p>Balance: <span id="balance">0</span></p>
-</div>
-
-<div id="adminPanel" class="card" style="display:none;">
-<h2>🔐 Admin Role Management</h2>
-
-<div class="admin-section">
-<h3>Create Role</h3>
-<input type="text" id="newRoleName" placeholder="Role Name">
-<input type="text" id="newRoleDesc" placeholder="Description">
-<button id="createRoleBtn">Create Role</button>
-</div>
-
-<div class="admin-section">
-<h3>Create Permission</h3>
-<input type="text" id="newPermissionName" placeholder="Permission Name">
-<input type="text" id="newPermissionModule" placeholder="Module Name">
-<button id="createPermissionBtn">Create Permission</button>
-</div>
-
-<div class="admin-section">
-<h3>Assign Role to User</h3>
-<select id="assignUser"></select>
-<select id="assignRole"></select>
-<select id="assignSite"></select>
-<button id="assignRoleBtn">Assign</button>
-</div>
-
-</div>
-
-<button id="logoutBtn">Logout</button>
-
+  <div id="main"></div>
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function(){
 
 const supabaseClient = supabase.createClient(
-"https://nwaewefiihkxjbkfmxrj.supabase.co",
-"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWV3ZWZpaWhreGpia2ZteHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTIwNTUsImV4cCI6MjA4NjU2ODA1NX0.ZfgHbHu9pYFemHserU0o4DJZ3P71UxmbZGuFOuz3ams"
+  "https://nwaewefiihkxjbkfmxrj.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWV3ZWZpaWhreGpia2ZteHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTIwNTUsImV4cCI6MjA4NjU2ODA1NX0.ZfgHbHu9pYFemHserU0o4DJZ3P71UxmbZGuFOuz3ams"
 );
 
 let currentUser = null;
-let cachedCategories = [];
 let userPermissions = [];
+let cachedCategories = [];
 
-const authSection = document.getElementById("authSection");
-const appSection = document.getElementById("appSection");
-const adminPanel = document.getElementById("adminPanel");
+const loginPage = document.getElementById("loginPage");
+const appLayout = document.getElementById("appLayout");
+const main = document.getElementById("main");
 
 document.getElementById("loginBtn").addEventListener("click", login);
-document.getElementById("logoutBtn").addEventListener("click", logout);
-document.getElementById("addRowBtn").addEventListener("click", addExpenseRow);
-document.getElementById("saveSessionBtn").addEventListener("click", saveSession);
-document.getElementById("addCreditBtn").addEventListener("click", addCredit);
-document.getElementById("createRoleBtn").addEventListener("click", createRole);
-document.getElementById("createPermissionBtn").addEventListener("click", createPermission);
-document.getElementById("assignRoleBtn").addEventListener("click", assignRoleToUser);
+document.getElementById("navLogout").addEventListener("click", logout);
+document.getElementById("navDashboard").addEventListener("click", renderDashboard);
+document.getElementById("navExpense").addEventListener("click", renderExpense);
+document.getElementById("navCredit").addEventListener("click", renderCredit);
+document.getElementById("navAdmin").addEventListener("click", renderAdmin);
 
-async function login() {
-try {
-const email = document.getElementById("email").value;
-const password = document.getElementById("password").value;
+async function login(){
+  const email=document.getElementById("email").value;
+  const password=document.getElementById("password").value;
 
-if(!email || !password){
-alert("Enter email & password");
-return;
+  const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
+  if(error){alert(error.message);return;}
+
+  currentUser=data.user;
+
+  loginPage.style.display="none";
+  appLayout.style.display="flex";
+
+  await loadPermissions();
+  renderDashboard();
 }
 
-const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+async function loadPermissions(){
+  const {data}=await supabaseClient
+  .from("user_roles")
+  .select(`
+    roles(
+      role_permissions(
+        permissions(name)
+      )
+    )
+  `)
+  .eq("user_id",currentUser.id);
 
-if (error) {
-alert("Login Error: " + error.message);
-return;
+  userPermissions=[];
+  data?.forEach(r=>{
+    r.roles?.role_permissions?.forEach(p=>{
+      if(p.permissions?.name){
+        userPermissions.push(p.permissions.name);
+      }
+    });
+  });
+
+  if(userPermissions.includes("create_expense"))
+    document.getElementById("navExpense").classList.remove("hidden");
+
+  if(userPermissions.includes("create_credit"))
+    document.getElementById("navCredit").classList.remove("hidden");
+
+  if(userPermissions.includes("manage_roles"))
+    document.getElementById("navAdmin").classList.remove("hidden");
 }
 
-currentUser = data.user;
-authSection.style.display="none";
-appSection.style.display="block";
+async function renderDashboard(){
+  const {data:credits}=await supabaseClient.from("credits").select("amount");
+  const {data:expenses}=await supabaseClient.from("expenses").select("amount");
 
-await loadInitialData();
-await loadUserPermissions();
+  const totalCredit=(credits||[]).reduce((s,c)=>s+Number(c.amount),0);
+  const totalExpense=(expenses||[]).reduce((s,e)=>s+Number(e.amount),0);
 
-} catch (err) {
-console.error("Unexpected Login Error:", err);
-alert("Unexpected login failure.");
-}
-}
-
-async function loadUserPermissions() {
-try {
-
-const { data, error } = await supabaseClient
-.from("user_roles")
-.select(`
-role_id,
-roles (
-id,
-name,
-role_permissions (
-permission_id,
-permissions ( name )
-)
-)
-`)
-.eq("user_id", currentUser.id);
-
-if (error) {
-alert("Error loading roles: " + error.message);
-console.error(error);
-return;
+  main.innerHTML=`
+    <div class="card">
+      <h2>Dashboard</h2>
+      <p>Total Credit: ${totalCredit}</p>
+      <p>Total Expense: ${totalExpense}</p>
+      <p>Balance: ${totalCredit-totalExpense}</p>
+    </div>
+  `;
 }
 
-if (!data || data.length === 0) {
-alert("No roles assigned to this user.");
-return;
-}
+async function renderExpense(){
+  const {data:sites}=await supabaseClient.from("sites").select("*");
+  const {data:categories}=await supabaseClient.from("categories").select("*");
 
-userPermissions = [];
+  cachedCategories=categories||[];
 
-data.forEach(ur => {
-if (!ur.roles) return;
-ur.roles.role_permissions.forEach(rp => {
-if (rp.permissions?.name) {
-userPermissions.push(rp.permissions.name);
-}
-});
-});
+  main.innerHTML=`
+    <div class="card">
+      <h2>Petty Cash Expense</h2>
+      <select id="expenseSite">
+        ${(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}
+      </select>
+      <div id="expenseContainer"></div>
+      <button id="addRowBtn">+ Add Expense</button>
+      <button id="saveExpenseBtn">Save</button>
+    </div>
+  `;
 
-document.getElementById("permissionList").innerText =
-userPermissions.length ? userPermissions.join(", ") : "None";
-
-console.log("Loaded Permissions:", userPermissions);
-
-if(userPermissions.includes("manage_roles")){
-adminPanel.style.display="block";
-await loadAdminData();
-}
-
-if(!userPermissions.includes("create_credit")){
-document.getElementById("addCreditBtn").disabled = true;
-}
-
-if(!userPermissions.includes("create_expense")){
-document.getElementById("saveSessionBtn").disabled = true;
-document.getElementById("addRowBtn").disabled = true;
-}
-
-} catch(err){
-console.error("Permission Load Failure:", err);
-alert("Permission loading failed.");
-}
-}
-
-async function loadAdminData() {
-const { data: users } = await supabaseClient.from("profiles").select("id, full_name");
-const { data: roles } = await supabaseClient.from("roles").select("*");
-const { data: sites } = await supabaseClient.from("sites").select("*");
-
-document.getElementById("assignUser").innerHTML =
-(users||[]).map(u=>`<option value="${u.id}">${u.full_name}</option>`).join("");
-
-document.getElementById("assignRole").innerHTML =
-(roles||[]).map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
-
-document.getElementById("assignSite").innerHTML =
-(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
-}
-
-async function createRole(){
-const name=document.getElementById("newRoleName").value;
-const description=document.getElementById("newRoleDesc").value;
-const {error}=await supabaseClient.from("roles").insert([{name,description}]);
-if(error){alert(error.message);return;}
-alert("Role created");
-await loadAdminData();
-}
-
-async function createPermission(){
-const name=document.getElementById("newPermissionName").value;
-const module=document.getElementById("newPermissionModule").value;
-const {error}=await supabaseClient.from("permissions").insert([{name,module}]);
-if(error){alert(error.message);return;}
-alert("Permission created");
-}
-
-async function assignRoleToUser(){
-const user_id=document.getElementById("assignUser").value;
-const role_id=document.getElementById("assignRole").value;
-const site_id=document.getElementById("assignSite").value;
-const {error}=await supabaseClient.from("user_roles").insert([{user_id,role_id,site_id}]);
-if(error){alert(error.message);return;}
-alert("Role assigned");
-}
-
-async function logout(){
-await supabaseClient.auth.signOut();
-location.reload();
-}
-
-async function loadInitialData(){
-const { data: sites } = await supabaseClient.from("sites").select("*");
-const { data: categories } = await supabaseClient.from("categories").select("*");
-
-document.getElementById("expenseSite").innerHTML =
-(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
-
-document.getElementById("creditSite").innerHTML =
-(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
-
-cachedCategories=categories||[];
-document.getElementById("expenseContainer").innerHTML="";
-addExpenseRow();
-await loadDashboard();
+  document.getElementById("addRowBtn").addEventListener("click",addExpenseRow);
+  document.getElementById("saveExpenseBtn").addEventListener("click",saveExpense);
+  addExpenseRow();
 }
 
 function addExpenseRow(){
-const div=document.createElement("div");
-div.className="row";
-div.innerHTML=`
-<input type="number" placeholder="Amount" class="amount">
-<select class="category">
-${cachedCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join("")}
-</select>
-<input type="text" placeholder="Description" class="desc">
-`;
-document.getElementById("expenseContainer").appendChild(div);
+  const div=document.createElement("div");
+  div.className="row";
+  div.innerHTML=`
+    <input type="number" class="amount" placeholder="Amount">
+    <select class="category">
+      ${cachedCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join("")}
+    </select>
+    <input type="text" class="desc" placeholder="Description">
+  `;
+  document.getElementById("expenseContainer").appendChild(div);
 }
 
-async function saveSession(){
-if(!userPermissions.includes("create_expense")){
-alert("You do not have permission to create expenses.");
-return;
+async function saveExpense(){
+  const rows=document.querySelectorAll(".row");
+  const site_id=document.getElementById("expenseSite").value;
+  const inserts=[];
+
+  rows.forEach(r=>{
+    const amount=r.querySelector(".amount").value;
+    const category_id=r.querySelector(".category").value;
+    const description=r.querySelector(".desc").value;
+    if(amount){
+      inserts.push({site_id,user_id:currentUser.id,category_id,amount,description});
+    }
+  });
+
+  if(inserts.length===0){alert("No entries");return;}
+
+  const {error}=await supabaseClient.from("expenses").insert(inserts);
+  if(error){alert(error.message);return;}
+
+  alert("Saved");
+  renderDashboard();
 }
 
-const rows=document.querySelectorAll(".row");
-const site_id=document.getElementById("expenseSite").value;
-const inserts=[];
+async function renderCredit(){
+  const {data:sites}=await supabaseClient.from("sites").select("*");
 
-rows.forEach(row=>{
-const amount=row.querySelector(".amount").value;
-const category_id=row.querySelector(".category").value;
-const description=row.querySelector(".desc").value;
-if(amount){inserts.push({site_id,user_id:currentUser.id,category_id,amount,description});}
-});
+  main.innerHTML=`
+    <div class="card">
+      <h2>Petty Cash Credit</h2>
+      <select id="creditSite">
+        ${(sites||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join("")}
+      </select>
+      <input type="number" id="creditAmount" placeholder="Amount">
+      <button id="saveCreditBtn">Save</button>
+    </div>
+  `;
 
-if(inserts.length===0){alert("No expenses entered");return;}
+  document.getElementById("saveCreditBtn").addEventListener("click",async()=>{
+    const site_id=document.getElementById("creditSite").value;
+    const amount=document.getElementById("creditAmount").value;
 
-const {error}=await supabaseClient.from("expenses").insert(inserts);
-if(error){alert(error.message);return;}
+    const {error}=await supabaseClient.from("credits")
+    .insert([{site_id,amount,created_by:currentUser.id}]);
 
-alert("Expenses saved");
-document.getElementById("expenseContainer").innerHTML="";
-addExpenseRow();
-await loadDashboard();
+    if(error){alert(error.message);return;}
+    alert("Credit added");
+    renderDashboard();
+  });
 }
 
-async function addCredit(){
-if(!userPermissions.includes("create_credit")){
-alert("You do not have permission to add credit.");
-return;
+function renderAdmin(){
+  main.innerHTML=`
+    <div class="card">
+      <h2>Admin Panel</h2>
+      <p>Role management coming next step...</p>
+    </div>
+  `;
 }
 
-const site_id=document.getElementById("creditSite").value;
-const amount=document.getElementById("creditAmount").value;
-
-const {error}=await supabaseClient.from("credits")
-.insert([{site_id,amount,created_by:currentUser.id}]);
-
-if(error){alert(error.message);return;}
-
-alert("Credit added");
-await loadDashboard();
-}
-
-async function loadDashboard(){
-const {data:credits}=await supabaseClient.from("credits").select("amount");
-const {data:expenses}=await supabaseClient.from("expenses").select("amount");
-
-const totalCredit=(credits||[]).reduce((s,c)=>s+Number(c.amount),0);
-const totalExpense=(expenses||[]).reduce((s,e)=>s+Number(e.amount),0);
-
-document.getElementById("totalCredit").innerText=totalCredit;
-document.getElementById("totalExpense").innerText=totalExpense;
-document.getElementById("balance").innerText=totalCredit-totalExpense;
+async function logout(){
+  await supabaseClient.auth.signOut();
+  location.reload();
 }
 
 });
