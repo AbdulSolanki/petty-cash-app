@@ -201,6 +201,11 @@ async function loadPermissions(){
 
   if(userPermissions.includes("manage_roles"))
     document.getElementById("navAdmin").classList.remove("hidden");
+
+  console.log("User Permissions:", userPermissions);
+alert("Permissions: " + userPermissions.join(", "));
+
+  
 }
 
 async function renderDashboard(){
